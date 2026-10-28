@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E2E testy</title>
+<style>
+:root {
+  --bg: #ffffff; --panel: #f6f7f9; --line: #dfe2e7; --text: #1d2330; --muted: #677084;
+  --accent: #2f6fde; --pass: #1f8a4c; --fail: #c93636; --skip: #9a7a12; --run: #2f6fde;
+  --sel: #e5edfb; --code: #f3f4f6;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15181e; --panel: #1b1f27; --line: #2c323d; --text: #e3e6ec; --muted: #8d95a6;
+    --accent: #6b9cf5; --pass: #4cc27f; --fail: #f07070; --skip: #d6b54a; --run: #6b9cf5;
+    --sel: #23304a; --code: #20242d;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; display: flex; flex-direction: column; }
+button { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+input { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+header { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+header h1 { font-size: 15px; margin: 0 8px 0 0; }
+header .grow { flex: 1; }
+#state { color: var(--muted); }
+main { flex: 1; display: flex; min-height: 0; }
+#side { width: 360px; min-width: 240px; border-right: 1px solid var(--line); overflow: auto; background: var(--panel); }
+#detail { flex: 1; overflow: auto; padding: 12px 16px; min-width: 0; }
+.pkg { padding: 12px 10px 4px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.pkg:hover { color: var(--text); }
+.pkg.sel { color: var(--accent); }
+.fold { border: none; background: none; padding: 0; width: 14px; flex: none; color: var(--muted); font-size: 10px; }
+.row.group { font-weight: 600; }
+.row .count { color: var(--muted); font-size: 12px; font-weight: 400; }
+.row.group .st { font-weight: 700; }
+table.sum { border-collapse: collapse; width: 100%; }
+table.sum td { padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line); }
+table.sum tr[data-key] { cursor: pointer; }
+table.sum tr[data-key]:hover { background: var(--sel); }
+table.sum td.num { text-align: right; white-space: nowrap; color: var(--muted); font-size: 12px; }
+.row { display: flex; align-items: center; gap: 6px; padding: 3px 10px; cursor: pointer; white-space: nowrap; }
+.row:hover { background: var(--sel); }
+.row.sel { background: var(--sel); box-shadow: inset 3px 0 0 var(--accent); }
+.row .name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.row .time, .muted { color: var(--muted); font-size: 12px; }
+.play { border: none; background: none; padding: 0 4px; color: var(--accent); font-size: 13px; }
+.st { width: 16px; text-align: center; flex: none; font-weight: 700; }
+.st.pass { color: var(--pass); } .st.fail { color: var(--fail); } .st.skip { color: var(--skip); }
+.st.run { color: var(--run); animation: spin 1s linear infinite; display: inline-block; }
+.st.idle, .st.queued, .st.stopped { color: var(--muted); }
+@keyframes spin { to { transform: rotate(360deg); } }
+h2 { font-size: 16px; margin: 0 0 4px; word-break: break-all; }
+h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 6px; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; border: 1px solid currentColor; }
+.badge.pass { color: var(--pass); } .badge.fail { color: var(--fail); } .badge.skip { color: var(--skip); }
+.badge.run { color: var(--run); } .badge.idle, .badge.queued, .badge.stopped { color: var(--muted); }
+pre.out { background: var(--code); padding: 8px 10px; border-radius: 6px; overflow: auto; max-height: 340px; margin: 0; white-space: pre-wrap; }
+.ex { border: 1px solid var(--line); border-radius: 6px; margin-bottom: 6px; }
+.ex > .head { display: flex; gap: 10px; align-items: center; padding: 6px 10px; cursor: pointer; }
+.ex > .head:hover { background: var(--sel); }
+.method { font-weight: 700; width: 52px; flex: none; }
+.path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.label { color: var(--accent); }
+.code2 { color: var(--pass); font-weight: 600; } .code4, .code5, .codeerr { color: var(--fail); font-weight: 600; }
+.ex .body { border-top: 1px solid var(--line); padding: 8px 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ex .body > div { min-width: 0; }
+.ex h4 { margin: 0 0 4px; font-size: 12px; color: var(--muted); }
+table.hdr { border-collapse: collapse; margin-bottom: 6px; width: 100%; }
+table.hdr td { padding: 1px 6px 1px 0; vertical-align: top; word-break: break-all; }
+table.hdr td:first-child { color: var(--muted); white-space: nowrap; width: 1%; }
+.sub { color: var(--muted); font-size: 12px; }
+.empty { color: var(--muted); padding: 24px 0; }
+.err { color: var(--fail); }
+@media (max-width: 800px) {
+  main { flex-direction: column; } #side { width: auto; max-height: 40vh; border-right: none; border-bottom: 1px solid var(--line); }
+  .ex .body { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>E2E testy</h1>
+  <button id="runAll" class="primary">▶ Spustit vše</button>
+  <button id="stop" disabled>■ Zastavit</button>
+  <button id="reload">↻ Načíst testy</button>
+  <button id="foldAll" title="Sbalit všechny balíčky, skupiny a testy s podtesty">▸ Sbalit vše</button>
+  <button id="unfoldAll">▾ Rozbalit vše</button>
+  <input id="filter" placeholder="Filtr názvu…" size="22">
+  <span class="grow"></span>
+  <span id="state">Připojuji…</span>
+</header>
+<main>
+  <nav id="side"><div class="empty" style="padding:16px">Načítám seznam testů…</div></nav>
+  <section id="detail"><div class="empty">Vyberte test vlevo. ▶ ho spustí.</div></section>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// Neither import paths nor go test names contain spaces.
+const key = (pkg, test) => pkg + " " + test;
+const unkey = (k) => { const i = k.indexOf(" "); return [k.slice(0, i), k.slice(i + 1)]; };
+const ICON = { idle: "○", queued: "◷", run: "◌", pass: "✓", fail: "✗", skip: "⤼", stopped: "■" };
+const LABEL = { idle: "nespuštěno", queued: "čeká", run: "běží", pass: "prošel", fail: "selhal", skip: "přeskočen", stopped: "přerušen" };
+
+let listing = [];            // [{package, tests}] from /api/tests
+let nodes = new Map();       // key -> {pkg, name, status, elapsed, output[], exchanges[]}
+let pkgOutput = new Map();   // pkg -> {status, output[]} for build failures etc.
+let running = null;          // active run id
+let selected = null;         // key of the selected test
+let open = new Set();        // expanded exchanges: key + "#" + index
+let listError = "";
+let runError = "";           // error of the last run, if the go command itself failed
+let wholePkgs = new Set();   // packages that the active run runs whole
+// Selection keys: key(pkg, test) for a test, key(pkg, "#" + group) for a group
+// and key(pkg, "#") for a package; a go test name never starts with "#".
+let collapsed = new Set(load("collapsed")); // folded packages and groups, by selection key
+function load(name) { try { return JSON.parse(localStorage.getItem("e2e-ui." + name)) || []; } catch { return []; } }
+function save(name, v) { try { localStorage.setItem("e2e-ui." + name, JSON.stringify(v)); } catch {} }
+
+function node(pkg, name) {
+  const k = key(pkg, name);
+  let n = nodes.get(k);
+  if (!n) { n = { pkg, name, status: "idle", elapsed: null, output: [], exchanges: [] }; nodes.set(k, n); }
+  return n;
+}
+function pkgState(pkg) {
+  let p = pkgOutput.get(pkg);
+  if (!p) { p = { status: "idle", output: [] }; pkgOutput.set(pkg, p); }
+  return p;
+}
+function isWithin(name, test) { return name === test || name.startsWith(test + "/"); }
+function resetAll() {
+  nodes = new Map(); pkgOutput = new Map(); running = null; runError = "";
+  for (const p of listing) for (const t of p.tests) node(p.package, t);
+}
+
+// --- events from the server ---
+function apply(ev) {
+  switch (ev.type) {
+    case "run-start":
+    {
+      running = ev.run;
+      runError = "";
+      const sel = ev.tests || []; // none: the whole packages
+      wholePkgs = new Set(sel.length ? [] : ev.packages);
+      for (const pkg of ev.packages) {
+        if (!sel.length) pkgOutput.set(pkg, { status: "run", output: [] });
+        for (const n of nodes.values()) {
+          if (n.pkg !== pkg || (sel.length && !sel.some((t) => isWithin(n.name, t)))) continue;
+          if (n.name.includes("/") && !sel.includes(n.name)) { nodes.delete(key(n.pkg, n.name)); continue; } // subtests reappear when they run
+          Object.assign(n, { status: "queued", elapsed: null, output: [], exchanges: [], run: ev.run });
+        }
+        for (const t of sel) Object.assign(node(pkg, t), { status: "queued", run: ev.run });
+      }
+      break;
+    }
+    case "test": {
+      if (!ev.test) {
+        const p = pkgState(ev.package);
+        if (ev.output) p.output.push(ev.output);
+        // A package passes only as a whole; a failure (e.g. a build error) shows always.
+        if (ev.action === "fail" || (["pass", "skip"].includes(ev.action) && wholePkgs.has(ev.package))) p.status = ev.action;
+        break;
+      }
+      const n = node(ev.package, ev.test);
+      n.run = ev.run;
+      if (ev.action === "run" || ev.action === "cont") n.status = "run";
+      else if (["pass", "fail", "skip"].includes(ev.action)) { n.status = ev.action; n.elapsed = ev.elapsed ?? null; }
+      if (ev.output) n.output.push(ev.output);
+      break;
+    }
+    case "exchange": {
+      const n = node(ev.package, ev.test);
+      n.exchanges.push(ev.exchange);
+      n.exchanges.sort((a, b) => a.started.localeCompare(b.started));
+      break;
+    }
+    case "run-end":
+      if (running === ev.run) running = null;
+      for (const n of nodes.values()) {
+        if (n.run !== ev.run) continue;
+        if (n.status === "queued") n.status = "idle";
+        if (n.status === "run") n.status = "stopped";
+      }
+      for (const p of pkgOutput.values()) if (p.status === "run") p.status = ev.stopped ? "stopped" : "idle";
+      if (ev.error) runError = ev.error;
+      break;
+  }
+}
+
+let queued = false;
+function render() {
+  if (queued) return;
+  queued = true;
+  requestAnimationFrame(() => { queued = false; renderSide(); renderDetail(); renderState(); });
+}
+
+function connect() {
+  const es = new EventSource("/api/events");
+  es.addEventListener("reset", () => { resetAll(); render(); });
+  es.onmessage = (m) => { apply(JSON.parse(m.data)); render(); };
+  es.onopen = () => { $("state").textContent = running ? "Běží…" : "Připraveno"; };
+  es.onerror = () => { $("state").textContent = "Spojení přerušeno, připojuji znovu…"; };
+}
+
+async function loadList() {
+  listError = "";
+  try {
+    const r = await fetch("/api/tests");
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || r.statusText);
+    listing = body;
+    for (const p of listing) for (const t of p.tests) node(p.package, t);
+  } catch (e) { listError = String(e.message || e); }
+  render();
+}
+
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
+  if (!r.ok && r.status !== 204) {
+    const b = await r.json().catch(() => ({}));
+    alert(b.error || r.statusText);
+  }
+}
+function runTest(pkg, test) {
+  if (test) { selected = key(pkg, test); }
+  post("/api/run", { package: pkg || "", test: test || "" });
+}
+function runGroup(pkg, group) {
+  const g = tree(pkg).find((it) => it.group === group);
+  if (g) post("/api/run", { package: pkg, tests: g.tests.map((n) => n.name) });
+}
+
+// --- rendering ---
+function children(pkg, name) {
+  const depth = name ? name.split("/").length : 0;
+  return [...nodes.values()]
+    .filter((n) => n.pkg === pkg && n.name.split("/").length === depth + 1 && (name === "" || n.name.startsWith(name + "/")))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+function matches(n, f) {
+  if (!f) return true;
+  if (n.name.toLowerCase().includes(f)) return true;
+  return children(n.pkg, n.name).some((c) => matches(c, f));
+}
+function fmtTime(sec) { return sec == null ? "" : sec < 1 ? Math.round(sec * 1000) + " ms" : sec.toFixed(2) + " s"; }
+
+// Tests are grouped by name like stories in Storybook: TestHealth_API_OK and
+// TestHealth_MCP_OK form the group "Health" with the tests "API OK" and
+// "MCP OK". A prefix with a single test is no group.
+function groupOf(name) { const m = /^Test([^_/]+)_[^/]/.exec(name); return m ? m[1] : ""; }
+function pkgList() { return [...new Set([...listing.map((p) => p.package), ...[...nodes.values()].map((n) => n.pkg)])].sort(); }
+
+// tree returns the top level of a package in source order: {group, tests} or {test}.
+function tree(pkg) {
+  const order = listing.find((p) => p.package === pkg)?.tests || [];
+  const idx = (n) => { const i = order.indexOf(n.name); return i < 0 ? Infinity : i; };
+  const tops = [...nodes.values()].filter((n) => n.pkg === pkg && !n.name.includes("/"))
+    .sort((a, b) => idx(a) - idx(b) || a.name.localeCompare(b.name));
+  const items = [], groups = new Map();
+  for (const n of tops) {
+    const g = groupOf(n.name);
+    if (!g) { items.push({ test: n }); continue; }
+    if (!groups.has(g)) { const it = { group: g, tests: [] }; groups.set(g, it); items.push(it); }
+    groups.get(g).tests.push(n);
+  }
+  return items.map((it) => it.group && it.tests.length === 1 ? { test: it.tests[0] } : it);
+}
+function testLabel(n, inGroup) {
+  const last = n.name.split("/").pop();
+  const base = n.name.includes("/") ? last : inGroup ? last.slice(("Test" + groupOf(last) + "_").length) : last.replace(/^Test(?=.)/, "");
+  return base.replaceAll("_", " ");
+}
+// aggregate is the status of a group of tests as a whole.
+function aggregate(list) {
+  const sts = new Set(list.map((n) => n.status));
+  for (const s of ["run", "queued", "fail", "stopped", "idle"]) if (sts.has(s)) return s;
+  return sts.has("pass") ? "pass" : sts.size ? "skip" : "idle";
+}
+const isFolded = (k, f) => !f && collapsed.has(k);
+function fold(k, force) {
+  if (force === false || (force === undefined && collapsed.has(k))) collapsed.delete(k); else collapsed.add(k);
+  save("collapsed", [...collapsed]);
+}
+
+// foldAll folds every package, group and test with subtests, or unfolds them all.
+function foldAll(folded) {
+  collapsed.clear();
+  if (folded) {
+    for (const pkg of pkgList()) {
+      collapsed.add(key(pkg, "#"));
+      for (const it of tree(pkg)) if (it.group) collapsed.add(key(pkg, "#" + it.group));
+    }
+    for (const n of nodes.values()) if (children(n.pkg, n.name).length) collapsed.add(key(n.pkg, n.name));
+  }
+  save("collapsed", [...collapsed]);
+}
+
+// reveal unfolds everything that hides k in the sidebar, and k itself.
+function reveal(k) {
+  const [pkg, name] = unkey(k);
+  const g = groupOf(name);
+  const parts = name.split("/");
+  const ks = [key(pkg, "#"), ...parts.map((_, i) => key(pkg, parts.slice(0, i + 1).join("/")))];
+  if (g && tree(pkg).some((it) => it.group === g)) ks.push(key(pkg, "#" + g));
+  for (const x of ks) collapsed.delete(x);
+  save("collapsed", [...collapsed]);
+}
+
+function renderSide() {
+  const f = $("filter").value.trim().toLowerCase();
+  const pkgs = pkgList();
+  let html = listError ? `<div class="err" style="padding:10px"><b>Seznam testů se nepodařilo načíst</b><pre class="out">${esc(listError)}</pre></div>` : "";
+  if (!pkgs.length && !listError) html += `<div class="empty" style="padding:16px">Žádné testy.</div>`;
+  const testRow = (n, depth, inGroup) => {
+    const k = key(n.pkg, n.name);
+    const kids = children(n.pkg, n.name).filter((c) => matches(c, f));
+    const folded = isFolded(k, f);
+    let h = `<div class="row${k === selected ? " sel" : ""}" data-key="${esc(k)}" style="padding-left:${10 + depth * 16}px" title="${esc(n.name)}">
+      ${kids.length ? `<button class="fold" data-fold="${esc(k)}">${folded ? "▸" : "▾"}</button>` : `<span class="fold"></span>`}
+      <span class="st ${n.status}">${ICON[n.status]}</span>
+      <span class="name">${esc(testLabel(n, inGroup))}</span>
+      <span class="time">${fmtTime(n.elapsed)}</span>
+      <button class="play" data-run="${esc(k)}" title="Spustit">▶</button></div>`;
+    if (!folded) for (const c of kids) h += testRow(c, depth + 1, false);
+    return h;
+  };
+  for (const pkg of pkgs) {
+    const items = tree(pkg).map((it) => {
+      if (!it.group) return matches(it.test, f) ? it : null;
+      const tests = it.group.toLowerCase().includes(f) ? it.tests : it.tests.filter((n) => matches(n, f));
+      return tests.length ? { ...it, tests } : null;
+    }).filter(Boolean);
+    if (f && !items.length) continue;
+    const pk = key(pkg, "#");
+    const p = pkgOutput.get(pkg);
+    const st = p && p.status !== "idle" ? p.status : aggregate(tree(pkg).flatMap((it) => it.tests || [it.test]));
+    const short = pkg.split("/").slice(-2).join("/");
+    html += `<div class="pkg${pk === selected ? " sel" : ""}" data-key="${esc(pk)}" title="${esc(pkg)}">
+      <button class="fold" data-fold="${esc(pk)}">${isFolded(pk, f) ? "▸" : "▾"}</button>
+      <span class="name">${esc(short)}</span>
+      ${st !== "idle" ? `<span class="st ${st}">${ICON[st]}</span>` : ""}
+      <button class="play" data-run-pkg="${esc(pkg)}" title="Spustit balíček">▶</button></div>`;
+    if (isFolded(pk, f)) continue;
+    for (const it of items) {
+      if (!it.group) { html += testRow(it.test, 0, false); continue; }
+      const gk = key(pkg, "#" + it.group);
+      const all = tree(pkg).find((g) => g.group === it.group).tests;
+      const gs = aggregate(all);
+      const folded = isFolded(gk, f);
+      html += `<div class="row group${gk === selected ? " sel" : ""}" data-key="${esc(gk)}" style="padding-left:10px" title="${esc("Test" + it.group + "_…")}">
+        <button class="fold" data-fold="${esc(gk)}">${folded ? "▸" : "▾"}</button>
+        <span class="st ${gs}">${ICON[gs]}</span>
+        <span class="name">${esc(it.group)} <span class="count">${all.length}</span></span>
+        <button class="play" data-run-group="${esc(gk)}" title="Spustit skupinu">▶</button></div>`;
+      if (!folded) for (const n of it.tests) html += testRow(n, 1, true);
+    }
+  }
+  const side = $("side"), top = side.scrollTop;
+  side.innerHTML = html;
+  side.scrollTop = top;
+}
+
+function renderState() {
+  $("stop").disabled = !running;
+  $("runAll").disabled = !!running;
+  for (const b of document.querySelectorAll("button.play, button.play-btn")) b.disabled = !!running;
+  const st = $("state");
+  st.textContent = running ? "Běží…" : runError ? "Chyba běhu: " + runError : "Připraveno";
+  st.className = runError && !running ? "err" : "";
+}
+
+function descendants(n) {
+  return [...nodes.values()].filter((c) => c.pkg === n.pkg && (c.name === n.name || c.name.startsWith(n.name + "/")));
+}
+
+// renderSummary shows a package or a group: its tests and their results.
+function renderSummary(pkg, group) {
+  const items = tree(pkg);
+  const tests = group ? (items.find((it) => it.group === group)?.tests || []) : items.flatMap((it) => it.tests || [it.test]);
+  const p = pkgOutput.get(pkg);
+  const st = !group && p && p.status !== "idle" ? p.status : aggregate(tests);
+  const run = group ? `data-run-group="${esc(key(pkg, "#" + group))}"` : `data-run-pkg="${esc(pkg)}"`;
+  const passed = tests.filter((n) => n.status === "pass").length;
+  let html = `<h2>${esc(group || pkg)}</h2>
+    <div><span class="badge ${st}">${LABEL[st]}</span>
+    <span class="muted">&nbsp;${passed}/${tests.length} prošlo${group ? "&nbsp;· " + esc(pkg) : ""}</span>
+    &nbsp;<button class="play-btn" ${run} ${running ? "disabled" : ""}>▶ Spustit ${group ? "skupinu" : "balíček"}</button></div>`;
+  html += `<h3>Testy (${tests.length})</h3><table class="sum">` + tests.map((n) => {
+    const calls = descendants(n).reduce((s, c) => s + c.exchanges.length, 0);
+    const g = groupOf(n.name);
+    return `<tr data-key="${esc(key(n.pkg, n.name))}" title="${esc(n.name)}">
+      <td style="width:1%"><span class="st ${n.status}">${ICON[n.status]}</span></td>
+      <td>${!group && g && items.some((it) => it.group === g) ? `<span class="muted">${esc(g)} › </span>` : ""}${esc(testLabel(n, !!group || items.some((it) => it.group === g)))}</td>
+      <td class="num">${calls ? calls + " volání" : ""}</td><td class="num">${fmtTime(n.elapsed)}</td></tr>`;
+  }).join("") + `</table>`;
+  if (!group && p && p.status === "fail" && p.output.length) html += `<h3>Výstup balíčku</h3><pre class="out">${esc(p.output.join(""))}</pre>`;
+  return html;
+}
+
+function renderDetail() {
+  const d = $("detail");
+  if (selected) {
+    const [pkg, name] = unkey(selected);
+    if (name.startsWith("#")) { d.innerHTML = renderSummary(pkg, name.slice(1)); return; }
+  }
+  const n = selected && nodes.get(selected);
+  if (!n) {
+    const pkgs = [...pkgOutput.entries()].filter(([, p]) => p.output.length && p.status === "fail");
+    d.innerHTML = pkgs.length
+      ? pkgs.map(([pkg, p]) => `<h2>${esc(pkg)}</h2><span class="badge fail">selhal</span><h3>Výstup</h3><pre class="out">${esc(p.output.join(""))}</pre>`).join("")
+      : `<div class="empty">Vyberte test vlevo. ▶ ho spustí.</div>`;
+    return;
+  }
+  const own = descendants(n);
+  const exchanges = own.flatMap((c) => c.exchanges.map((ex, i) => ({ ex, test: c.name, id: key(c.pkg, c.name) + "#" + i })))
+    .sort((a, b) => a.ex.started.localeCompare(b.ex.started));
+  const output = n.output.join("");
+  const pkgOut = pkgOutput.get(n.pkg);
+  const buildFail = n.status !== "pass" && pkgOut && pkgOut.status === "fail" && !own.some((c) => c.output.length) ? pkgOut.output.join("") : "";
+
+  let html = `<h2>${esc(n.name)}</h2>
+    <div><span class="badge ${n.status}">${LABEL[n.status]}</span>
+    ${n.elapsed != null ? `<span class="muted">&nbsp;${fmtTime(n.elapsed)}</span>` : ""}
+    <span class="muted">&nbsp;${esc(n.pkg)}</span>
+    &nbsp;<button data-run="${esc(selected)}" ${running ? "disabled" : ""}>▶ Spustit</button></div>`;
+  html += `<h3>Volání (${exchanges.length})</h3>`;
+  html += exchanges.length ? exchanges.map(renderExchange).join("") : `<div class="muted">Test zatím neudělal žádný HTTP požadavek.</div>`;
+  html += `<h3>Výstup testu</h3>${output ? `<pre class="out">${esc(output)}</pre>` : `<div class="muted">Bez výstupu.</div>`}`;
+  if (buildFail) html += `<h3>Výstup balíčku</h3><pre class="out">${esc(buildFail)}</pre>`;
+  d.innerHTML = html;
+}
+
+function rpcLabel(body) {
+  try {
+    const msgs = [].concat(JSON.parse(body));
+    return msgs.map((m) => m.method ? m.method + (m.params?.name ? " " + m.params.name : "") : "").filter(Boolean).join(", ");
+  } catch { return ""; }
+}
+function pretty(body, header) {
+  if (!body) return "";
+  const ct = (header?.["Content-Type"] || [""])[0];
+  if (ct.startsWith("text/event-stream")) {
+    return body.split("\n").map((l) => {
+      if (!l.startsWith("data:")) return l;
+      try { return "data: " + JSON.stringify(JSON.parse(l.slice(5)), null, 2); } catch { return l; }
+    }).join("\n");
+  }
+  try { return JSON.stringify(JSON.parse(body), null, 2); } catch { return body; }
+}
+function headers(h) {
+  const rows = Object.entries(h || {}).sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `<tr><td>${esc(k)}</td><td class="mono">${esc(v.join(", "))}</td></tr>`).join("");
+  return rows ? `<table class="hdr">${rows}</table>` : "";
+}
+function bodyBlock(body, header, truncated) {
+  if (!body) return `<div class="muted">bez těla</div>`;
+  return `<pre class="out">${esc(pretty(body, header))}</pre>${truncated ? `<div class="muted">… zkráceno</div>` : ""}`;
+}
+function renderExchange({ ex, test, id }) {
+  let path = ex.request.url;
+  try { const u = new URL(path); path = u.pathname + u.search; } catch {}
+  const label = path.startsWith("/mcp") ? rpcLabel(ex.request.body) : "";
+  const st = ex.response ? ex.response.status : "chyba";
+  const cls = ex.response ? "code" + String(st)[0] : "codeerr";
+  const sub = test !== nodes.get(selected).name ? `<span class="sub">${esc(test.split("/").pop())}</span>` : "";
+  const isOpen = open.has(id);
+  let html = `<div class="ex"><div class="head" data-toggle="${esc(id)}">
+    <span class="mono method">${esc(ex.request.method)}</span>
+    <span class="mono path">${esc(path)} ${label ? `<span class="label">${esc(label)}</span>` : ""}</span>
+    ${sub}<span class="mono ${cls}">${esc(st)}</span><span class="muted">${ex.durationMs.toFixed(1)} ms</span></div>`;
+  if (isOpen) {
+    html += `<div class="body"><div><h4>Request</h4>${headers(ex.request.header)}${bodyBlock(ex.request.body, ex.request.header, ex.request.bodyTruncated)}</div>
+      <div><h4>Response</h4>${ex.response
+        ? headers(ex.response.header) + bodyBlock(ex.response.body, ex.response.header, ex.response.bodyTruncated)
+        : `<div class="err">${esc(ex.error)}</div>`}</div></div>`;
+  }
+  return html + `</div>`;
+}
+
+// --- interaction ---
+document.addEventListener("click", (e) => {
+  const run = e.target.closest("[data-run]");
+  if (run) { const [pkg, test] = unkey(run.dataset.run); runTest(pkg, test); return; }
+  const runPkg = e.target.closest("[data-run-pkg]");
+  if (runPkg) { runTest(runPkg.dataset.runPkg, ""); return; }
+  const runGrp = e.target.closest("[data-run-group]");
+  if (runGrp) { const [pkg, g] = unkey(runGrp.dataset.runGroup); runGroup(pkg, g.slice(1)); return; }
+  const f = e.target.closest("[data-fold]");
+  if (f) { fold(f.dataset.fold); render(); return; }
+  const toggle = e.target.closest("[data-toggle]");
+  if (toggle) { const id = toggle.dataset.toggle; open.has(id) ? open.delete(id) : open.add(id); render(); return; }
+  const row = e.target.closest(".row, .pkg, tr[data-key]");
+  if (row) { selected = row.dataset.key; reveal(selected); render(); }
+});
+$("runAll").onclick = () => runTest("", "");
+$("stop").onclick = () => post("/api/stop");
+$("reload").onclick = loadList;
+$("foldAll").onclick = () => { foldAll(true); render(); };
+$("unfoldAll").onclick = () => { foldAll(false); render(); };
+$("filter").oninput = render;
+
+connect();
+loadList();
+</script>
+</body>
+</html>
